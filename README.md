@@ -21,7 +21,7 @@ pluginManagement {
 build.gradle.kts
 ```kotlin
 plugins {
-    id("net.wiredtomato.hygradle") version "0.2.1"
+    id("net.wiredtomato.hygradle") version "0.2.2"
 }
 
 hytale {

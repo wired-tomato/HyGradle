@@ -30,7 +30,7 @@ public abstract class RunServerTask extends JavaExec {
 
         var modPaths = new ArrayList<>(hytaleExtension.additionalModPaths.get());
 
-        mainSources.getJava().getSourceDirectories().forEach(sourceDir -> modPaths.add(sourceDir.getParentFile().getAbsolutePath()));
+        modPaths.add(mainSources.getOutput().getResourcesDir().getAbsolutePath());
 
         args("--mods=\"" + String.join(",", modPaths) + "\"");
 

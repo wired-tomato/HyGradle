@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "net.wiredtomato"
-version = "0.2.1"
+version = "0.2.2"
 
 repositories {
     mavenCentral()
@@ -66,6 +66,7 @@ tasks.processResources {
 
 publishing {
     repositories {
+        mavenLocal()
         maven("https://maven.teamvoided.org/releases") {
             name = "TeamVoided"
             credentials {
