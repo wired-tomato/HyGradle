@@ -6,6 +6,8 @@ Simple and convenient to use, simple install it and it will:
 - use the server downloader to download the hytale server (side effect: Mac OS is not supported at the moment as the hytale server downloader does not bundle a mac os executable)
 - setup all necessary gradle configurations and runs
 
+## [Plugin Template](https://github.com/wired-tomato/hytale-plugin-template)
+
 ## Installation
 settings.gradle.kts
 ```kotlin
