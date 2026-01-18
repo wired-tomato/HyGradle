@@ -1,17 +1,20 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     `java-gradle-plugin`
     `maven-publish`
+    id("com.gradleup.shadow") version "9.3.1"
 }
 
 group = "net.wiredtomato"
-version = "0.1.0"
+version = "0.2.0"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-
+    implementation("org.vineflower:vineflower:1.11.2")
 }
 
 gradlePlugin {
@@ -20,6 +23,32 @@ gradlePlugin {
             id = "net.wiredtomato.hygradle"
             implementationClass = "net.wiredtomato.hygradle.HyGradlePlugin"
         }
+    }
+}
+
+tasks.getByName<ShadowJar>("shadowJar") {
+    archiveClassifier.set("")
+
+    relocate("net.fabricmc.fernflower", "net.wiredtomato.hygradle.fabricmc.fernflower")
+    relocate("org.jetbrains.java.decompiler", "net.wiredtomato.hygradle.jetbrains.decompiler")
+}
+
+tasks.jar {
+    enabled = false
+}
+
+configurations.runtimeElements {
+    outgoing.artifacts.clear()
+    outgoing.artifact(tasks.shadowJar)
+}
+configurations.apiElements {
+    outgoing.artifacts.clear()
+    outgoing.artifact(tasks.shadowJar)
+}
+
+components.named<AdhocComponentWithVariants>("java") {
+    withVariantsFromConfiguration(configurations.runtimeElements.get()) {
+        skip()
     }
 }
 

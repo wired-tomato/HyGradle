@@ -21,7 +21,7 @@ pluginManagement {
 build.gradle.kts
 ```kotlin
 plugins {
-    id("net.wiredtomato.hygradle") version "0.1.0"
+    id("net.wiredtomato.hygradle") version "0.2.0"
 }
 
 hytale {
@@ -45,5 +45,7 @@ hytale {
 Run the server with `runServer` task or
 
 Invalidate your server jar with the `invalidateHytaleDownload` task
+
+Decompile the Hytale server files with the `genSources` task (Uses Vineflower)
 
 ### This was mostly made for some fun, feel free to report any bugs or issues, or even make feature requests!

@@ -3,6 +3,7 @@ package net.wiredtomato.hygradle;
 import net.wiredtomato.hygradle.hytale.HytaleExtension;
 import net.wiredtomato.hygradle.hytale.HytaleServerDownloader;
 import net.wiredtomato.hygradle.hytale.HytaleVersionExtractor;
+import net.wiredtomato.hygradle.hytale.task.GenerateSourcesTask;
 import net.wiredtomato.hygradle.hytale.task.RunServerTask;
 import net.wiredtomato.hygradle.version.Version;
 import org.gradle.api.Plugin;
@@ -28,6 +29,9 @@ public class HyGradlePlugin implements Plugin<Project> {
 
             var runServerTask = project.getTasks().register("runServer", RunServerTask.class);
             runServerTask.get().setGroup("hygradle");
+
+            var genSourcesTask = project.getTasks().register("genSources", GenerateSourcesTask.class);
+            genSourcesTask.get().setGroup("hygradle");
         });
     }
 

@@ -278,6 +278,12 @@ public class HytaleServerDownloader {
         return outputJar;
     }
 
+    public static Path getOutputForceStrippedJar() {
+        return outputJar.getFileName().toString().contains("stripped")
+                ? outputJar
+                : getServerDir().resolve(outputJar.getFileName().toString().replace(".jar", "-stripped.jar"));
+    }
+
     public static Path getServerDir() {
         return serverDirectory;
     }
