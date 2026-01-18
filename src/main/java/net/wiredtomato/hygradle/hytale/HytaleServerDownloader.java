@@ -36,6 +36,7 @@ public class HytaleServerDownloader {
 
         try {
             Files.createDirectories(outputDirectory);
+            Files.createDirectories(serverDirectory);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
