@@ -4,7 +4,10 @@ import net.wiredtomato.hygradle.hytale.task.InvalidateHytaleDownloadTask;
 import org.gradle.api.Project;
 import org.gradle.internal.os.OperatingSystem;
 
-import java.io.*;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -25,14 +28,23 @@ public class HytaleServerDownloader {
     private static Path outputJar;
     private static Path assetsZip;
 
+    private static String hytaleVersion;
+
     public static void register(Project project) {
         var invalidateHytaleDownloadTask = project.getTasks().register("invalidateHytaleDownload", InvalidateHytaleDownloadTask.class);
         invalidateHytaleDownloadTask.get().setGroup("hygradle");
     }
 
     public static void download(Project project) {
-        outputDirectory = project.getLayout().getBuildDirectory().dir("hygradle/download").get().getAsFile().toPath();
-        serverDirectory = project.getLayout().getBuildDirectory().file("hygradle/server").get().getAsFile().toPath();
+        var hytaleExtension = (HytaleExtension) project.getExtensions().getByName("hytale");
+
+        if (hytaleExtension.downloadToUserHome.get()) {
+            outputDirectory = project.getGradle().getGradleUserHomeDir().toPath().resolve("hygradle/download");
+            serverDirectory = project.getGradle().getGradleUserHomeDir().toPath().resolve("hygradle/server");
+        } else {
+            outputDirectory = project.getLayout().getBuildDirectory().dir("hygradle/download").get().getAsFile().toPath();
+            serverDirectory = project.getLayout().getBuildDirectory().file("hygradle/server").get().getAsFile().toPath();
+        }
 
         try {
             Files.createDirectories(outputDirectory);
@@ -51,14 +63,48 @@ public class HytaleServerDownloader {
 
         System.out.println("[HyGradle] Downloading Hytale Server...");
 
-        var hytaleExtension = (HytaleExtension) project.getExtensions().getByName("hytale");
 
         var dateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
         var timePath = outputDirectory.resolve(".lastUpdated");
 
+        if (hytaleExtension.useUserHytaleJar.get()) {
+            var installDir = hytaleExtension.hytaleInstallDir.get().toPath();
+            var patchline = hytaleExtension.patchLine.get();
+            var userHytaleJar = installDir.resolve("install/" + patchline + "/package/game/latest/Server/HytaleServer.jar");
+            var userAssetsZip = userHytaleJar.getParent().getParent().resolve("Assets.zip");
+
+
+            System.out.println("[HyGradle] Using user Hytale jar, Hytale install directory: " + installDir);
+
+            hytaleVersion = HytaleVersionExtractor.getHytaleVersion(userHytaleJar) + "-user";
+            outputJar = serverJarOutput(hytaleVersion, patchline, false);
+            assetsZip = assetsZipOutput(hytaleVersion, patchline);
+            var assetsJar = assetsZipOutput(hytaleVersion, patchline, "jar");
+
+            try {
+                Files.writeString(getServerDir().resolve(".version"), hytaleVersion);
+                Files.createSymbolicLink(outputJar, userHytaleJar);
+                Files.createSymbolicLink(assetsZip, userAssetsZip);
+                Files.createSymbolicLink(assetsJar, userAssetsZip);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+
+            return;
+        } else downloadHytale(hytaleExtension);
+
+        try {
+            Files.writeString(getServerDir().resolve(".patchline"), hytaleExtension.patchLine.get());
+            Files.writeString(timePath, dateTimeFormatter.format(LocalDateTime.now()));
+            Files.createSymbolicLink(assetsZipOutput(hytaleVersion, hytaleExtension.patchLine.get(), "jar"), assetsZip);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static void downloadHytale(HytaleExtension hytaleExtension) {
         downloadDownloader();
         var os = OperatingSystem.current();
-
 
         if (os.isMacOsX()) {
             throw new IllegalStateException("Hytale Downloader does not support Mac OS X");
@@ -87,7 +133,7 @@ public class HytaleServerDownloader {
 
         try (InputStream is = process.getInputStream()) {
             int b;
-            while((b = is.read()) != -1) {
+            while ((b = is.read()) != -1) {
                 System.out.write(b);
                 if (b == '\n' || b == '\r') System.out.flush();
             }
@@ -96,8 +142,6 @@ public class HytaleServerDownloader {
         }
 
         System.out.println();
-
-        String hytaleVersion;
 
         try (ZipFile serverZip = new ZipFile(serverZipPath.toFile())) {
             var jar = serverZip.getEntry("Server/HytaleServer.jar");
@@ -163,13 +207,6 @@ public class HytaleServerDownloader {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-
-        try {
-            Files.writeString(getServerDir().resolve(".patchline"), patchLine);
-            Files.writeString(timePath, dateTimeFormatter.format(LocalDateTime.now()));
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     private static Path serverJarOutput(String version, String patchline, Boolean stripped) {
@@ -183,9 +220,13 @@ public class HytaleServerDownloader {
     }
 
     private static Path assetsZipOutput(String version, String patchline) {
+        return assetsZipOutput(version, patchline, "zip");
+    }
+
+    private static Path assetsZipOutput(String version, String patchline, String fileExt) {
         version = patchline + "." + version;
 
-        return getServerDir().resolve("assets-" + version + ".zip");
+        return getServerDir().resolve("hytale-server-assets-" + version + "." + fileExt);
     }
 
     private static boolean shouldCopyEntry(ZipEntry entry) {
@@ -229,7 +270,8 @@ public class HytaleServerDownloader {
         client.close();
     }
 
-    public record Status(Boolean upToDate, String version, String patchline, Path output) {}
+    public record Status(Boolean upToDate, String version, String patchline, Path output) {
+    }
 
     public static Status status(Project project) {
         var hytaleExtension = (HytaleExtension) project.getExtensions().getByName("hytale");
@@ -247,28 +289,34 @@ public class HytaleServerDownloader {
             patchline = "";
         }
 
-        if (!patchline.equals(hytaleExtension.patchLine.get())) {
-            return new Status(false, version, null, null);
+        if (hytaleExtension.useUserHytaleJar.get() && !version.contains("user")) {
+            version += "-user";
+        }
+
+        if (!hytaleExtension.useUserHytaleJar.get()) {
+            version = version.replace("-user", "");
         }
 
         var selected = serverJarOutput(version, patchline, hytaleExtension.stripHytaleJar.get());
         var selectedAssets = assetsZipOutput(version, patchline);
 
-        if (Files.exists(selected) && Files.exists(selectedAssets)) {
-            LocalDateTime time;
-            try {
-                var timeStr = Files.readString(timePath);
-                time = LocalDateTime.parse(timeStr, dateTimeFormatter);
-            } catch (IOException e) {
-                time = LocalDateTime.MIN;
-            }
-
-            var now = LocalDateTime.now();
-
-            return new Status(Duration.between(now, time).compareTo(hytaleExtension.serverLifetime.get()) < 0, version, patchline, selected);
+        LocalDateTime time;
+        try {
+            var timeStr = Files.readString(timePath);
+            time = LocalDateTime.parse(timeStr, dateTimeFormatter);
+        } catch (IOException e) {
+            time = LocalDateTime.MIN;
         }
 
-        return new Status(false, version, patchline, selected);
+        var now = LocalDateTime.now();
+        boolean upToDate = Duration.between(now, time).compareTo(hytaleExtension.serverLifetime.get()) < 0;
+
+        return new Status(
+                hytaleExtension.useUserHytaleJar.get() || (Files.exists(selected) && Files.exists(selectedAssets) && upToDate),
+                version,
+                patchline,
+                selected
+        );
     }
 
     public static Path getOutputDirectory() {
@@ -279,11 +327,11 @@ public class HytaleServerDownloader {
         return outputJar;
     }
 
-    public static Path getOutputForceStrippedJar() {
-        return outputJar.getFileName().toString().contains("stripped")
-                ? outputJar
-                : getServerDir().resolve(outputJar.getFileName().toString().replace(".jar", "-stripped.jar"));
-    }
+//    public static Path getOutputForceStrippedJar() {
+//        return outputJar.getFileName().toString().contains("stripped")
+//                ? outputJar
+//                : getServerDir().resolve(outputJar.getFileName().toString().replace(".jar", "-stripped.jar"));
+//    }
 
     public static Path getServerDir() {
         return serverDirectory;

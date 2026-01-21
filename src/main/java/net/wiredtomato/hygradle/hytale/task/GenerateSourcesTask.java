@@ -18,7 +18,7 @@ public class GenerateSourcesTask extends DefaultTask {
 
     public GenerateSourcesTask() {
         serverSourceJar = HytaleServerDownloader.getServerDir().resolve(HytaleServerDownloader.getOutputJar().getFileName().toString().replace(".jar", "-sources.jar"));
-        serverJar = HytaleServerDownloader.getOutputForceStrippedJar();
+        serverJar = HytaleServerDownloader.getOutputJar();
     }
 
     @TaskAction
@@ -29,7 +29,8 @@ public class GenerateSourcesTask extends DefaultTask {
                 .logger(new IFernflowerLogger() {
                     @Override
                     public void writeMessage(String message, Severity severity) {
-                        System.out.println("[" + severity + "] " + message);
+                        if (severity != Severity.INFO && severity != Severity.TRACE)
+                            System.out.println("[" + severity + "] " + message);
                     }
 
                     @Override

@@ -3,7 +3,9 @@ package net.wiredtomato.hygradle;
 import net.wiredtomato.hygradle.hytale.HytaleExtension;
 import net.wiredtomato.hygradle.hytale.HytaleServerDownloader;
 import net.wiredtomato.hygradle.hytale.HytaleVersionExtractor;
+import net.wiredtomato.hygradle.hytale.task.FetchServerCredentials;
 import net.wiredtomato.hygradle.hytale.task.GenerateSourcesTask;
+import net.wiredtomato.hygradle.hytale.task.InvalidateCredentials;
 import net.wiredtomato.hygradle.hytale.task.RunServerTask;
 import net.wiredtomato.hygradle.version.Version;
 import org.gradle.api.Plugin;
@@ -16,16 +18,30 @@ public class HyGradlePlugin implements Plugin<Project> {
         System.out.println("[HyGradle] Running HyGradle version " + Version.VERSION);
 
         HytaleExtension hytaleExtension = project.getExtensions().create("hytale", HytaleExtension.class);
-        HytaleServerDownloader.register(project);
 
         project.afterEvaluate(proj -> {
-            HytaleServerDownloader.download(proj);
+            if (hytaleExtension.useUserHytaleJar.get()) {
+                System.out.println("[HyGradle] Using user Hytale jar, will not strip");
+                hytaleExtension.stripHytaleJar.set(false);
+            }
+
+            HytaleServerDownloader.download(project);
+            HytaleServerDownloader.register(project);
 
             var hytaleVersion = HytaleVersionExtractor.getHytaleVersion(HytaleServerDownloader.getOutputJar());
             System.out.println("[HyGradle] Hytale version " + hytaleVersion);
-            if (hytaleExtension.stripHytaleJar.get()) System.out.println("[HyGradle] The Hytale jar has been stripped to only contain com.hypixel classes");
+            if (hytaleExtension.stripHytaleJar.get())
+                System.out.println("[HyGradle] The Hytale jar has been stripped to only contain com.hypixel classes");
 
             applyDependencies(proj, hytaleExtension, hytaleVersion);
+
+            if (hytaleExtension.useUserHomeAuth.get()) {
+                var fetchServerCredentialTask = project.getTasks().register("fetchServerCredentials", FetchServerCredentials.class);
+                fetchServerCredentialTask.get().setGroup("hygradle/auth");
+
+                var invalidateCredentials = project.getTasks().register("invalidateCredentials", InvalidateCredentials.class);
+                invalidateCredentials.get().setGroup("hygradle/auth");
+            }
 
             var runServerTask = project.getTasks().register("runServer", RunServerTask.class);
             runServerTask.get().setGroup("hygradle");
@@ -40,12 +56,13 @@ public class HyGradlePlugin implements Plugin<Project> {
 
         project.getRepositories().flatDir((d) -> d.dirs(HytaleServerDownloader.getServerDir()));
 
-        String requestedVersion = hytaleExtension.patchLine.get() + "." + (hytaleExtension.stripHytaleJar.get() ? hytaleVersion + "-stripped" : hytaleVersion);
+        var userString = (hytaleExtension.useUserHytaleJar.get() ? "-user" : "");
+        String unstrippedVersion = hytaleExtension.patchLine.get() + "." + hytaleVersion;
+        String requestedVersion = unstrippedVersion + (hytaleExtension.stripHytaleJar.get() ? "-stripped" : "") + userString;
+        String assetsVersion = unstrippedVersion + userString;
 
-        project.getConfigurations().getByName("compileOnly").resolutionStrategy(resolutionStrategy -> resolutionStrategy.dependencySubstitution(dep -> dep.substitute(dep.module("com.hypixel:hytale-server"))
-                .using(dep.module("local:hytale-server:" + requestedVersion))));
-
-        dependencies.add("compileOnly", "com.hypixel:hytale-server:" + requestedVersion);
+        dependencies.add("implementation", "com.hypixel:hytale-server:" + requestedVersion);
+        dependencies.add("compileOnly", "com.hypixel:hytale-server-assets:" + assetsVersion);
 
         if (!hytaleExtension.stripHytaleJar.get()) return;
 
@@ -70,6 +87,10 @@ public class HyGradlePlugin implements Plugin<Project> {
         impl(dependencies, "org.checkerframework:checker-compat-qual:2.5.6");
         impl(dependencies, "org.fusesource.jansi:jansi:2.4.2");
         impl(dependencies, "org.jline:jline:3.30.6");
+    }
+
+    public static HytaleExtension getHytaleExtension(Project project) {
+        return (HytaleExtension) project.getExtensions().getByName("hytale");
     }
 
     private void impl(DependencyHandler dependencies, Object notation) {
